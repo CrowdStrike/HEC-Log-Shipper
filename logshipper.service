@@ -1,0 +1,21 @@
+#place this file under /usr/lib/systemd/system/logshipper.service and symlink in /etc/systemd/system/multi-user.target.wants
+
+[Unit]
+Description=Humio logshipper
+After=network.target
+StartLimitIntervalSec=2
+
+[Service]
+Type=simple
+Restart=Always
+RestartSec=1
+ExecStart=/opt/logshipper/logshipper
+WorkingDirectory=/opt/logshipper
+StandardOutput=syslog
+StandardError=syslog
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
+Alias=logshipper.service
