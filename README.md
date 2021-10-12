@@ -1,2 +1,2 @@
-# Humio-Integration-Connector-Examples
-This repository contains examples of code used to send data to Humio instances
+# HEC-Log-Shipper
+This repository contains examples of Python Code used to send JSON logs to a HEC API
