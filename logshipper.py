@@ -30,10 +30,11 @@ fh.setFormatter(formatter)
 logger.addHandler(fh)
 hostname = socket.getfqdn()
 
-#add OS identification, hostname, ip address automatically
+# add OS identification, hostname, ip address automatically
+
 
 class CloudTrail(threading.Thread):
-    def __init__(self, a_key, s_key, sqs_q, rgn, dest_url, dest_token, name="aws-cloudtrail",daemon=True):
+    def __init__(self, a_key, s_key, sqs_q, rgn, dest_url, dest_token, name="aws-cloudtrail", daemon=True):
         threading.Thread.__init__(self)
         self.name = name
         self.a_key = a_key
@@ -43,38 +44,40 @@ class CloudTrail(threading.Thread):
         self.dest_url = dest_url
         self.dest_token = dest_token
         self.sqs = boto3.client('sqs', region_name=self.rgn, aws_access_key_id=self.a_key, aws_secret_access_key=self.s_key)
-        self.s3 = boto3.client("s3",region_name=self.rgn, aws_access_key_id=self.a_key, aws_secret_access_key=self.s_key)
+        self.s3 = boto3.client("s3", region_name=self.rgn, aws_access_key_id=self.a_key, aws_secret_access_key=self.s_key)
         self.http = urllib3.PoolManager()
 
     def run(self):
-         logger.debug('Starting '+ self.name)
-         while True:
-             bucket1,key1,handle1=self.get_location()
-             logger.debug('reading file {}'.format(str(key1)))
-             for record in self.get_content(bucket1,key1):
-                 r = self.ingest_event(json.dumps(record))
-                 self.delete_message(handle1)
-         logger.debug('Stopping {}'.format(self.name)) 
+        logger.debug('Starting ' + self.name)
+        while True:
+            bucket1, key1, handle1 = self.get_location()
+            logger.debug('reading file {}'.format(str(key1)))
+            for record in self.get_content(bucket1, key1):
+                r = self.ingest_event(json.dumps(record))
+                self.delete_message(handle1)
+        logger.debug('Stopping {}'.format(self.name))
 
     def get_location(self):
-        response = self.sqs.receive_message(QueueUrl=self.sqs_q,MessageAttributeNames=["All"], WaitTimeSeconds=10, VisibilityTimeout=300, MaxNumberOfMessages=1)
+        response = self.sqs.receive_message(QueueUrl=self.sqs_q, MessageAttributeNames=[
+                                            "All"], WaitTimeSeconds=10, VisibilityTimeout=300, MaxNumberOfMessages=1)
         message = json.loads(response["Messages"][0]["Body"])
         return message["Records"][0]["s3"]["bucket"]["name"], message["Records"][0]["s3"]["object"]["key"], response["Messages"][0]["ReceiptHandle"]
 
-    def get_content(self,bucket1,key1):
+    def get_content(self, bucket1, key1):
         response = self.s3.get_object(Bucket=bucket1, Key=key1)
-        json_file = json.load(gzip.GzipFile(None,'rb',None,BytesIO(response['Body'].read())))
+        json_file = json.load(gzip.GzipFile(None, 'rb', None, BytesIO(response['Body'].read())))
         return json_file["Records"]
-    
-    def delete_message(self,handle1):
-        return self.sqs.delete_message(QueueUrl=self.sqs_q,ReceiptHandle=handle1)
 
-    def ingest_event(self,record1):
+    def delete_message(self, handle1):
+        return self.sqs.delete_message(QueueUrl=self.sqs_q, ReceiptHandle=handle1)
+
+    def ingest_event(self, record1):
         auth_token = ' Bearer '+self.dest_token
         return self.http.request('POST', self.dest_url, body=record1, headers={'Content-Type': 'application/json', 'Authorization': 'Bearer' + self.dest_token})
 
+
 class SIEMConnector(threading.Thread):
-    def __init__(self, source_loc, dest_url, dest_token, name="siem-connector",daemon=True):
+    def __init__(self, source_loc, dest_url, dest_token, name="siem-connector", daemon=True):
         threading.Thread.__init__(self)
         self.name = name
         self.source_loc = source_loc
@@ -85,7 +88,7 @@ class SIEMConnector(threading.Thread):
     def run(self):
         count = 0
         logger.debug('Starting {}'.format(self.name))
-        if Path(self.source_loc).is_file():  
+        if Path(self.source_loc).is_file():
             logger.debug('filename: {}'.format(self.source_loc))
             newevent = ''
             for line in self.read_streaming_file(open(self.source_loc)):
@@ -98,7 +101,7 @@ class SIEMConnector(threading.Thread):
                     newevent = ''
         logger.debug('Stopping {}'.format(self.name))
 
-    def read_streaming_file(self,source_loc1):
+    def read_streaming_file(self, source_loc1):
         interval = 0.2
         while True:
             where = source_loc1.tell()
@@ -109,13 +112,13 @@ class SIEMConnector(threading.Thread):
             else:
                 yield line
 
-    def ingest_event(self,event1):
+    def ingest_event(self, event1):
         auth_token = ' Bearer '+self.dest_token
-        return self.http.request('POST', self.dest_url, body=event1, headers={'Content-Type': 'application/json', 'Authorization': 'Bearer' + self.dest_token}) 
+        return self.http.request('POST', self.dest_url, body=event1, headers={'Content-Type': 'application/json', 'Authorization': 'Bearer' + self.dest_token})
 
 
 class Syslog(threading.Thread):
-    def __init__(self, source_loc, source_cat, dest_type, dest_url, dest_token, name="syslog",daemon=True):
+    def __init__(self, source_loc, source_cat, dest_type, dest_url, dest_token, name="syslog", daemon=True):
         threading.Thread.__init__(self)
         self.name = name
         self.source_loc = source_loc
@@ -133,7 +136,7 @@ class Syslog(threading.Thread):
         pos = {}
         if Path(self.name).exists():
             try:
-                with open(self.name,'rb') as pfr:
+                with open(self.name, 'rb') as pfr:
                     pos = pickle.load(pfr)
                     logger.debug('history loaded..')
             except Exception as e:
@@ -141,9 +144,9 @@ class Syslog(threading.Thread):
                 pos = {}
         else:
             pos = {}
-        self.read_content(pos,self.source_loc)
+        self.read_content(pos, self.source_loc)
 
-    def read_content(self,pos1,source_loc1):
+    def read_content(self, pos1, source_loc1):
         while True:
             new_content = False
 
@@ -159,7 +162,7 @@ class Syslog(threading.Thread):
                     with open(file) as fh:
                         m = mmap.mmap(fh.fileno(), 0, prot=mmap.PROT_READ)
                         if not header in pos1:
-                            pos1[header]=m.tell()
+                            pos1[header] = m.tell()
                         else:
                             m.seek(pos1[header])
                         while True:
@@ -168,7 +171,7 @@ class Syslog(threading.Thread):
                                 break
                             pos1[header] = m.tell()
                             new_content = True
-                            self.ingest_event(line.decode('utf-8'),file)
+                            self.ingest_event(line.decode('utf-8'), file)
                 except Exception as e:
                     pos1[file] = 'error'
                     logger.debug(str(file)+' :  '+str(e))
@@ -178,24 +181,25 @@ class Syslog(threading.Thread):
                 self.write_inv(pos1)
             time.sleep(0.2)
 
-    def get_files(self,source_loc2):
+    def get_files(self, source_loc2):
 
-        #validate and expand by wildcard and OS type
+        # validate and expand by wildcard and OS type
 
         files = glob.glob(source_loc2+'/*', recursive=True)
         return [f for f in files if os.path.isfile(f)]
 
-    def ingest_event(self,event1,file1):
+    def ingest_event(self, event1, file1):
         auth_token = ' Bearer '+self.dest_token
-        event2 = {"@rawstring":event1, "#source": file1, "#host":hostname}
-        return self.http.request('POST', self.dest_url, body=json.dumps(event2), headers={'Content-Type': 'text/plain', 'charset':'utf-8', 'Authorization': 'Bearer' + self.dest_token})
+        event2 = {"@rawstring": event1, "#source": file1, "#host": hostname}
+        return self.http.request('POST', self.dest_url, body=json.dumps(event2), headers={'Content-Type': 'text/plain', 'charset': 'utf-8', 'Authorization': 'Bearer' + self.dest_token})
 
-    def write_inv(self,pos2):
-        with open(self.name,'wb') as pfw:
-            pickle.dump(pos2,pfw)
+    def write_inv(self, pos2):
+        with open(self.name, 'wb') as pfw:
+            pickle.dump(pos2, pfw)
+
 
 class GCPAuditLog(threading.Thread):
-    def __init__(self, proj_id, sub_id, cred_path, dest_url, dest_token, name="gcp-audit-log",daemon=True):
+    def __init__(self, proj_id, sub_id, cred_path, dest_url, dest_token, name="gcp-audit-log", daemon=True):
         threading.Thread.__init__(self)
         self.name = name
         self.proj_id = proj_id
@@ -208,7 +212,7 @@ class GCPAuditLog(threading.Thread):
         self.sub_path = self.subscriber.subscription_path(self.proj_id, self.sub_id)
         self.http = urllib3.PoolManager()
 
-    def callback(self,message: pubsub_v1.subscriber.message.Message):
+    def callback(self, message: pubsub_v1.subscriber.message.Message):
         self.ingest_event(message.data)
         message.ack()
 
@@ -224,11 +228,11 @@ class GCPAuditLog(threading.Thread):
                 streaming_pull_future.cancel()
                 streaming_pull_future.result()
 
-    def ingest_event(self,event1):
+    def ingest_event(self, event1):
         auth_token = ' Bearer '+self.dest_token
         return self.http.request('POST', self.dest_url, body=event1, headers={'Content-Type': 'application/json', 'Authorization': 'Bearer' + self.dest_token})
 
- 
+
 if __name__ == "__main__":
     try:
         config = configparser.ConfigParser()
@@ -237,23 +241,24 @@ if __name__ == "__main__":
             logger.debug('**** Section: {} ****'.format(i))
             logger.debug(config.items(i))
             if config[i]['source_type'] == "aws-cloudtrail":
-                thread1 = CloudTrail(config[i]['access_key'],config[i]['secret_key'],config[i]['sqs_queue_url'],config[i]['region'],config[i]['dest_url'],config[i]['dest_token'],name=i)
+                thread1 = CloudTrail(config[i]['access_key'], config[i]['secret_key'], config[i]['sqs_queue_url'],
+                                     config[i]['region'], config[i]['dest_url'], config[i]['dest_token'], name=i)
                 thread1.start()
             if config[i]['source_type'] == "crwd-siem-connector":
-                thread2  = SIEMConnector(config[i]['source_location'],config[i]['dest_url'],config[i]['dest_token'],name=i)    
+                thread2 = SIEMConnector(config[i]['source_location'], config[i]['dest_url'], config[i]['dest_token'], name=i)
                 thread2.start()
             if config[i]['source_type'] == "syslog":
-                thread3  = Syslog(config[i]['source_location'],config[i]['source_category'],config[i]['dest_type'],config[i]['dest_url'],config[i]['dest_token'],name=i)
+                thread3 = Syslog(config[i]['source_location'], config[i]['source_category'], config[i]
+                                 ['dest_type'], config[i]['dest_url'], config[i]['dest_token'], name=i)
                 thread3.start()
             if config[i]['source_type'] == "gcp-audit-log":
-                thread4  = GCPAuditLog(config[i]['project_id'],config[i]['subscription_id'],config[i]['credential_path'], config[i]['dest_url'],config[i]['dest_token'],name=i)
+                thread4 = GCPAuditLog(config[i]['project_id'], config[i]['subscription_id'], config[i]
+                                      ['credential_path'], config[i]['dest_url'], config[i]['dest_token'], name=i)
                 thread4.start()
 
     except configparser.NoOptionError as e:
-        print("No option error",e)
+        print("No option error", e)
         sys.exit(1)
     except Exception as e:
         print(e)
         sys.exit(1)
-
-
