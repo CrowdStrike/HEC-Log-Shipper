@@ -1,4 +1,5 @@
 boto3
-google.cloud
+google-cloud
+google-cloud-pubsub
 urllib3
 
