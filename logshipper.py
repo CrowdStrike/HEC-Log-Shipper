@@ -452,6 +452,6 @@ if __name__ == "__main__":
         running_thread[0].kill()
         running_thread[0].join()
         if not running_thread[0].isAlive():
-            print(f"{running_thread[1]} thread killed.")
+            print("Thread killed.")
 
     print("Process shutdown.")
