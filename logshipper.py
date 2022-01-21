@@ -448,10 +448,10 @@ if __name__ == "__main__":
         #     if not thread[0].isAlive():
         #         # restart thread
         time.sleep(2)
-    for thread in threads:
-        thread[0].kill()
-        thread[0].join()
-        if not thread[0].isAlive():
-            print(f"{thread[1]} thread killed.")
+    for running_thread in threads:
+        running_thread[0].kill()
+        running_thread[0].join()
+        if not running_thread[0].isAlive():
+            print(f"{running_thread[1]} thread killed.")
 
     print("Process shutdown.")
