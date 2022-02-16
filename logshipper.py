@@ -43,6 +43,7 @@ hostname = socket.getfqdn()
 
 # add OS identification, hostname, ip address automatically
 
+
 class FDR2Humio(threading.Thread):  # pylint: disable=R0902
     """FDR2Humio class."""
 
