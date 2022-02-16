@@ -19,6 +19,8 @@ A connector to send arbitrary log sources to remote/local Humio instance.
 ## Available Sourcetypes and suggested parsers:
 (Check Humio marketplace to download respective packages)
 
+- CrowdStrike FDR 
+
 - AWS CloudTrail
 
 - CrowdStrike SIEM Connector
