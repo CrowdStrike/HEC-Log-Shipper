@@ -45,6 +45,7 @@ hostname = socket.getfqdn()
 
 class FDR2Humio(threading.Thread):  # pylint: disable=R0902
     """FDR2Humio class."""
+
     def __init__(self,  # pylint: disable=R0913
                  a_key,
                  s_key,
@@ -107,20 +108,20 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
         response = self.sqs_client.receive_message(QueueUrl=self.sqs_q, WaitTimeSeconds=10, VisibilityTimeout=300, MaxNumberOfMessages=1)
         message = response['Messages'][0]
         mbody = json.loads(message['Body'])
-        return mbody['bucket'],mbody['files'][0]['path'],message['ReceiptHandle']
+        return mbody['bucket'], mbody['files'][0]['path'], message['ReceiptHandle']
 
-    def get_content(self,bucket1,key1):
+    def get_content(self, bucket1, key1):
         """Read in the gzip'd message."""
         response = self.s3_client.get_object(Bucket=bucket1, Key=key1)
         with gzip.GzipFile(fileobj=response["Body"]) as gzipfile:
-             json_file = json.dumps(gzipfile.read().decode('utf-8'))
+            json_file = json.dumps(gzipfile.read().decode('utf-8'))
         return json_file
 
-    def delete_message(self,handle1):
+    def delete_message(self, handle1):
         """Delete the message from the SQS queue."""
         return self.sqs_client.delete_message(QueueUrl=self.sqs_q,ReceiptHandle=handle1)
 
-    def ingest_event(self,record1):
+    def ingest_event(self, record1):
         """Ingest the parsed event."""
         return self.http.request("POST",
                                  self.dest_url,
@@ -131,6 +132,7 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
     def kill(self):
         """Set the kill flag."""
         self.killed = True
+
 
 class CloudTrail(threading.Thread):
     """AWS CloudTrail class."""
