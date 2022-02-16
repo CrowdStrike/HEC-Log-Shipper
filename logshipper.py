@@ -43,11 +43,8 @@ hostname = socket.getfqdn()
 
 # add OS identification, hostname, ip address automatically
 
-
-
 class FDR2Humio(threading.Thread):  # pylint: disable=R0902
     """FDR2Humio class."""
-
 
     def __init__(self,  # pylint: disable=R0913
                  a_key,
@@ -507,7 +504,7 @@ if __name__ == "__main__":
             logger.debug(config.items(i))
             if config[i]["source_type"] == "crwd-fdr":
                 thread1 = FDR2Humio(config[i]["access_key"], config[i]["secret_key"], config[i]["sqs_queue_url"],
-                          config[i]["region"], config[i]["dest_url"], config[i]["dest_token"], name=i)
+                                    config[i]["region"], config[i]["dest_url"], config[i]["dest_token"], name=i)
                 thread1.daemon = True
                 thread1.start()
                 threads.append([thread1, "crwd-fdr"])
