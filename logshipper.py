@@ -44,8 +44,10 @@ hostname = socket.getfqdn()
 # add OS identification, hostname, ip address automatically
 
 
+
 class FDR2Humio(threading.Thread):  # pylint: disable=R0902
     """FDR2Humio class."""
+
 
     def __init__(self,  # pylint: disable=R0913
                  a_key,
@@ -106,8 +108,8 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
 
     def get_location(self):
         """Retrieve the S3 location from the SQS message."""
-        response = self.sqs_client.receive_message(QueueUrl=self.sqs_q, WaitTimeSeconds=10, VisibilityTimeout=300, 
-                   MaxNumberOfMessages=1)
+        response = self.sqs_client.receive_message(QueueUrl=self.sqs_q, WaitTimeSeconds=10,
+                                                   VisibilityTimeout=300, MaxNumberOfMessages=1)
         message = response['Messages'][0]
         mbody = json.loads(message['Body'])
         return mbody['bucket'], mbody['files'][0]['path'], message['ReceiptHandle']
@@ -128,8 +130,8 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
         return self.http.request("POST",
                                  self.dest_url,
                                  body=record1.encode('utf-8'),
-                                 headers={"Content-Type": "application/json", "Authorization": "Bearer" + self.dest_token}
-                                 )
+                                 headers={"Content-Type": "application/json", "Authorization": "Bearer"
+                                          + self.dest_token})
 
     def kill(self):
         """Set the kill flag."""
@@ -504,8 +506,8 @@ if __name__ == "__main__":
             logger.debug("**** Section: %s ****", i)
             logger.debug(config.items(i))
             if config[i]["source_type"] == "crwd-fdr":
-                thread1 = FDR2Humio(config[i]["access_key"], config[i]["secret_key"], config[i]["sqs_queue_url"], 
-                                    config[i]["region"], config[i]["dest_url"], config[i]["dest_token"], name=i)
+                thread1 = FDR2Humio(config[i]["access_key"], config[i]["secret_key"], config[i]["sqs_queue_url"],
+                          config[i]["region"], config[i]["dest_url"], config[i]["dest_token"], name=i)
                 thread1.daemon = True
                 thread1.start()
                 threads.append([thread1, "crwd-fdr"])
