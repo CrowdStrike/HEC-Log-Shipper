@@ -44,6 +44,98 @@ hostname = socket.getfqdn()
 # add OS identification, hostname, ip address automatically
 
 
+class FDR2Humio(threading.Thread):  # pylint: disable=R0902
+    """FDR2Humio class."""
+
+    def __init__(self,  # pylint: disable=R0913
+                 a_key,
+                 s_key,
+                 sqs_q,
+                 rgn,
+                 dest_url,
+                 dest_token,
+                 name="crwd-fdr",
+                 ):
+        """Initialize the object."""
+        threading.Thread.__init__(self)
+        self.name = name
+        self.a_key = a_key
+        self.s_key = s_key
+        self.sqs_q = sqs_q
+        self.rgn = rgn
+        self.dest_url = dest_url
+        self.dest_token = dest_token
+        self.sqs_client = boto3.client('sqs',
+                                       region_name=self.rgn,
+                                       aws_access_key_id=self.a_key,
+                                       aws_secret_access_key=self.s_key
+                                       )
+        self.s3_client = boto3.client("s3",
+                                      region_name=self.rgn,
+                                      aws_access_key_id=self.a_key,
+                                      aws_secret_access_key=self.s_key
+                                      )
+        self.http = urllib3.PoolManager()
+        self.killed = False
+
+    def run(self):
+        """Start the thread."""
+        logger.debug('Starting %s', self.name)
+        while not self.killed:
+            sub_threads = []
+            for _ in range(20):  # Might want to make thread count an adjustable variable
+                try:
+                    bucket1, key1, handle1 = self.get_location()
+                    if bucket1 and key1:
+                        subthread = threading.Thread(target=self.read_events, args=[bucket1, key1, handle1])
+                        sub_threads.append(subthread)
+                        subthread.start()
+                except Exception as erred:
+                    logger.debug(erred)
+                    break
+            time.sleep(5)
+            for sub_thread in sub_threads:
+                sub_thread.join()
+        logger.debug("Stopping %s", self.name)
+
+    def read_events(self, bucket2, key2, handle2):
+        """Event reader sub-processing thread handler."""
+        self.ingest_event(json.loads(self.get_content(bucket2, key2)))
+        logger.debug("file: %s", str(key2))
+        self.delete_message(handle2)
+
+    def get_location(self):
+        """Retrieve the S3 location from the SQS message."""
+        response = self.sqs_client.receive_message(QueueUrl=self.sqs_q, WaitTimeSeconds=10,
+                                                   VisibilityTimeout=300, MaxNumberOfMessages=1)
+        message = response['Messages'][0]
+        mbody = json.loads(message['Body'])
+        return mbody['bucket'], mbody['files'][0]['path'], message['ReceiptHandle']
+
+    def get_content(self, bucket1, key1):
+        """Read in the gzip'd message."""
+        response = self.s3_client.get_object(Bucket=bucket1, Key=key1)
+        with gzip.GzipFile(fileobj=response["Body"]) as gzipfile:
+            json_file = json.dumps(gzipfile.read().decode('utf-8'))
+        return json_file
+
+    def delete_message(self, handle1):
+        """Delete the message from the SQS queue."""
+        return self.sqs_client.delete_message(QueueUrl=self.sqs_q, ReceiptHandle=handle1)
+
+    def ingest_event(self, record1):
+        """Ingest the parsed event."""
+        return self.http.request("POST",
+                                 self.dest_url,
+                                 body=record1.encode('utf-8'),
+                                 headers={"Content-Type": "application/json", "Authorization": "Bearer"
+                                          + self.dest_token})
+
+    def kill(self):
+        """Set the kill flag."""
+        self.killed = True
+
+
 class CloudTrail(threading.Thread):
     """AWS CloudTrail class."""
 
@@ -411,6 +503,12 @@ if __name__ == "__main__":
         for i in config.sections():
             logger.debug("**** Section: %s ****", i)
             logger.debug(config.items(i))
+            if config[i]["source_type"] == "crwd-fdr":
+                thread1 = FDR2Humio(config[i]["access_key"], config[i]["secret_key"], config[i]["sqs_queue_url"],
+                                    config[i]["region"], config[i]["dest_url"], config[i]["dest_token"], name=i)
+                thread1.daemon = True
+                thread1.start()
+                threads.append([thread1, "crwd-fdr"])
             if config[i]["source_type"] == "aws-cloudtrail":
                 thread1 = CloudTrail(config[i]["access_key"], config[i]["secret_key"], config[i]["sqs_queue_url"],
                                      config[i]["region"], config[i]["dest_url"], config[i]["dest_token"], name=i)
