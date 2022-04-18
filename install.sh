@@ -11,7 +11,6 @@ echo '*** Starting installation ***'
 sudo mkdir /opt/logshipper
 echo '   created /opt/logshipper'
 sudo cp logshipper.py /opt/logshipper/
-sudo cp logshipper /opt/logshipper/
 sudo cp logshipper.conf /opt/logshipper/
 echo '-----------------------'
 sudo ls -l /opt/logshipper
