@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Humio Log Shipping utility.
 
  ___ ___                __
