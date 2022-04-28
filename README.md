@@ -7,7 +7,6 @@ A connector to send arbitrary log sources to remote/local Humio instance.
 - Verify if logshipper service is running : systemctl status logshipper 
 - Stop the service, if its already running : systemctl stop logshipper 
 - Update the logshipper.service file in case using logshipper.py instead of logshipper executable
-- Bundled executable logshipper is built on RPM based OS
 
 ## Add sourcetype stanzas for ingestion: 
 - Update logshipper.conf 
