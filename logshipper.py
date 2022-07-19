@@ -34,10 +34,10 @@ from google.cloud import pubsub_v1
 
 # Configure logging.
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
 log_handle = RotatingFileHandler("logshipper.log", maxBytes=2048000, backupCount=5)
-log_handle.setLevel(logging.DEBUG)
+log_handle.setLevel(logging.INFO)
 log_handle.setFormatter(formatter)
 logger.addHandler(log_handle)
 hostname = socket.getfqdn()
@@ -84,7 +84,7 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
 
     def run(self):
         """Start the thread."""
-        logger.debug("Starting %s", self.name)
+        logger.info("Starting %s", self.name)
         while not self.killed:
             sub_threads = []
             for _ in range(20):  # Might want to make thread count an adjustable variable
@@ -97,12 +97,12 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
                         sub_threads.append(subthread)
                         subthread.start()
                 except Exception as erred:
-                    logger.debug(erred)
+                    logger.error(erred)
                     break
             time.sleep(5)
             for sub_thread in sub_threads:
                 sub_thread.join()
-        logger.debug("Stopping %s", self.name)
+        logger.info("Stopping %s", self.name)
 
     def read_events(self, bucket2, key2, handle2):
         """Event reader sub-processing thread handler."""
@@ -186,7 +186,7 @@ class CloudTrail(threading.Thread):
 
     def run(self):
         """Start the thread."""
-        logger.debug("Starting %s", self.name)
+        logger.info("Starting %s", self.name)
         while not self.killed:
             sub_threads = []
             for _ in range(50):  # Might want to make thread count an adjustable variable
@@ -198,12 +198,12 @@ class CloudTrail(threading.Thread):
                     sub_threads.append(subthread)
                     subthread.start()
                 except Exception as erred:
-                    logger.debug(erred)
+                    logger.error(erred)
                     break
             time.sleep(5)
             for sub_thread in sub_threads:
                 sub_thread.join()
-        logger.debug("Stopping %s", self.name)
+        logger.info("Stopping %s", self.name)
 
     def read_events(self, bucket2, key2, handle2):
         """Event reader sub-processing thread handler."""
@@ -219,7 +219,7 @@ class CloudTrail(threading.Thread):
         response = self.sqs_client.receive_message(
             QueueUrl=self.sqs_q,
             MessageAttributeNames=["All"],
-            WaitTimeSeconds=10,
+            WaitTimeSeconds=20,
             VisibilityTimeout=300,
             MaxNumberOfMessages=1,
         )
@@ -259,8 +259,6 @@ class CloudTrail(threading.Thread):
 class AWSGuardDuty(threading.Thread):
     """AWS GuardDuty class."""
 
-    # TODO: test encrypted SQS
-
     def __init__(
         self,
         a_key,
@@ -291,7 +289,7 @@ class AWSGuardDuty(threading.Thread):
 
     def run(self):
         """Start the thread."""
-        logger.debug("Starting %s", self.name)
+        logger.info("Starting %s", self.name)
         while not self.killed:
             sub_threads = []
             for _ in range(50):  # Might want to make thread count an adjustable variable
@@ -300,12 +298,12 @@ class AWSGuardDuty(threading.Thread):
                     sub_threads.append(subthread)
                     subthread.start()
                 except Exception as erred:
-                    logger.debug(erred)
+                    logger.error(erred)
                     break
             time.sleep(5)
             for sub_thread in sub_threads:
                 sub_thread.join()
-        logger.debug("Stopping %s", self.name)
+        logger.info("Stopping %s", self.name)
 
     def process_event(self):
         """Event reader sub-processing thread handler."""
@@ -341,9 +339,6 @@ class AWSGuardDuty(threading.Thread):
                 return
         except Exception as e:
             logger.error(f"Unknown error occured when reading message from SQS: {e}")
-            logger.error(response)
-            logger.error(f"response: {response['Messages']}")
-            logger.error(f"response_bool: {bool(response['Messages'])}")
 
     def delete_message(self, receipt_handle):
         """Delete the message from the SQS queue."""
@@ -385,7 +380,7 @@ class SIEMConnector(threading.Thread):
     def run(self):
         """Run the connector."""
         count = 0
-        logger.debug("Starting %s", self.name)
+        logger.info("Starting %s", self.name)
         if Path(self.source_loc).is_file():
             logger.debug("filename: %s", self.source_loc)
             newevent = ""
@@ -398,7 +393,7 @@ class SIEMConnector(threading.Thread):
                         logger.debug("Count = %s", str(count))
                         self.ingest_event(json.dumps(read_event) + "\n")
                         newevent = ""
-        logger.debug("Stopping %s", self.name)
+        logger.info("Stopping %s", self.name)
 
     def read_streaming_file(self, source_loc1):
         """Read in the contents of the streamed file."""
@@ -446,13 +441,13 @@ class Syslog(threading.Thread):
 
     def run(self):
         """Start the connector."""
-        logger.debug("Starting %s", self.name)
+        logger.info("Starting %s", self.name)
         if (
             (Path(self.source_loc).is_file() and self.source_cat == "folder")
             or Path(self.source_loc).is_dir()
             and self.source_cat == "file"
         ):
-            logger.debug(self.source_loc + " is not " + self.source_cat)
+            logger.info(self.source_loc + " is not " + self.source_cat)
         else:
             pos = {}
             if Path(self.name).exists():
@@ -570,9 +565,9 @@ class GCPAuditLog(threading.Thread):
         """Run the connector and set the trace."""
         sys.settrace(self.globaltrace)
         # timeout = 5.0
-        logger.debug("Starting %s", self.name)
+        logger.info("Starting %s", self.name)
         streaming_pull_future = self.subscriber.subscribe(self.sub_path, callback=self.callback)
-        logger.debug("Listening for messages on %s", self.sub_path)
+        logger.info("Listening for messages on %s", self.sub_path)
         with self.subscriber:
             time.sleep(5)
             try:
