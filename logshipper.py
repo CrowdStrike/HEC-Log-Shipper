@@ -314,11 +314,11 @@ class AWSGuardDuty(threading.Thread):
             try:
                 self.ingest_event(json.dumps({"event": json.loads(event)}))
             except Exception as e:
-                logger.error(f"Unknown error occurred when writing document to Humio: {e}")
+                logger.error("Unknown error occurred when writing document to Humio: %s", e)
             try:
                 self.delete_message(receipt_handle)
             except Exception as e:
-                logger.error(f"Unknown error occurred when deleting message from SQS: {e}")
+                logger.error("Unknown error occurred when deleting message from SQS: %s", e)
 
     def get_content(self):
         """Read message from SQS queue"""
@@ -334,11 +334,11 @@ class AWSGuardDuty(threading.Thread):
                 event = response["Messages"][0]["Body"]
                 receipt_handle = response["Messages"][0]["ReceiptHandle"]
                 return event, receipt_handle
-            else:
-                logger.debug("Received empty message from SQS")
-                return
+            logger.debug("Received empty message from SQS")
+            return None
         except Exception as e:
-            logger.error(f"Unknown error occured when reading message from SQS: {e}")
+            logger.error("Unknown error occured when reading message from SQS: %s", e)
+            return None
 
     def delete_message(self, receipt_handle):
         """Delete the message from the SQS queue."""
@@ -357,7 +357,8 @@ class AWSGuardDuty(threading.Thread):
                 },
             )
         except Exception as e:
-            logger.error(f"Unknown error occurred when writing to Humio: {e}")
+            logger.error("Unknown error occurred when writing to Humio: %s", e)
+            return None
 
     def kill(self):
         """Set the kill flag."""

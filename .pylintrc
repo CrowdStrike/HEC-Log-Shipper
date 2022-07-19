@@ -143,7 +143,7 @@ disable=print-statement,
         no-name-in-module,
         unspecified-encoding,
         no-member,
-        
+
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
 # multiple time (only on the command line, not in the configuration file where
@@ -250,7 +250,8 @@ good-names=i,
            k,
            ex,
            Run,
-           _
+           _,
+           e
 
 # Include a hint for the correct naming format with invalid-name.
 include-naming-hint=no
