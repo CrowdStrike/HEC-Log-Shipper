@@ -256,6 +256,119 @@ class CloudTrail(threading.Thread):
         self.killed = True
 
 
+class AWSGuardDuty(threading.Thread):
+    """AWS GuardDuty class."""
+
+    # TODO: test encrypted SQS
+
+    def __init__(
+        self,
+        a_key,
+        s_key,
+        sqs_q,
+        rgn,
+        dest_url,
+        dest_token,
+        name,
+    ):
+        """Initialize the GuardDuty object."""
+        threading.Thread.__init__(self)
+        self.name = name
+        self.a_key = a_key
+        self.s_key = s_key
+        self.sqs_q = sqs_q
+        self.rgn = rgn
+        self.dest_url = dest_url
+        self.dest_token = dest_token
+        self.sqs_client = boto3.client(
+            "sqs",
+            region_name=self.rgn,
+            aws_access_key_id=self.a_key,
+            aws_secret_access_key=self.s_key,
+        )
+        self.http = urllib3.PoolManager()
+        self.killed = False
+
+    def run(self):
+        """Start the thread."""
+        logger.debug("Starting %s", self.name)
+        while not self.killed:
+            sub_threads = []
+            for _ in range(50):  # Might want to make thread count an adjustable variable
+                try:
+                    subthread = threading.Thread(target=self.process_event)
+                    sub_threads.append(subthread)
+                    subthread.start()
+                except Exception as erred:
+                    logger.debug(erred)
+                    break
+            time.sleep(5)
+            for sub_thread in sub_threads:
+                sub_thread.join()
+        logger.debug("Stopping %s", self.name)
+
+    def process_event(self):
+        """Event reader sub-processing thread handler."""
+
+        response = self.get_content()
+        if response:
+            event, receipt_handle = response
+            try:
+                self.ingest_event(json.dumps({"event": json.loads(event)}))
+            except Exception as e:
+                logger.error(f"Unknown error occurred when writing document to Humio: {e}")
+            try:
+                self.delete_message(receipt_handle)
+            except Exception as e:
+                logger.error(f"Unknown error occurred when deleting message from SQS: {e}")
+
+    def get_content(self):
+        """Read message from SQS queue"""
+        try:
+            response = response = self.sqs_client.receive_message(
+                QueueUrl=self.sqs_q,
+                MessageAttributeNames=["ALL"],
+                WaitTimeSeconds=10,
+                VisibilityTimeout=15,
+                MaxNumberOfMessages=1,
+            )
+            if "Messages" in response:
+                event = response["Messages"][0]["Body"]
+                receipt_handle = response["Messages"][0]["ReceiptHandle"]
+                return event, receipt_handle
+            else:
+                logger.debug("Received empty message from SQS")
+                return
+        except Exception as e:
+            logger.error(f"Unknown error occured when reading message from SQS: {e}")
+            logger.error(response)
+            logger.error(f"response: {response['Messages']}")
+            logger.error(f"response_bool: {bool(response['Messages'])}")
+
+    def delete_message(self, receipt_handle):
+        """Delete the message from the SQS queue."""
+        return self.sqs_client.delete_message(QueueUrl=self.sqs_q, ReceiptHandle=receipt_handle)
+
+    def ingest_event(self, event):
+        """Ingest the parsed event."""
+        try:
+            return self.http.request(
+                "POST",
+                self.dest_url,
+                body=event,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.dest_token}",
+                },
+            )
+        except Exception as e:
+            logger.error(f"Unknown error occurred when writing to Humio: {e}")
+
+    def kill(self):
+        """Set the kill flag."""
+        self.killed = True
+
+
 class SIEMConnector(threading.Thread):
     """SIEM connector class."""
 
@@ -530,6 +643,7 @@ if __name__ == "__main__":
         for i in config.sections():
             logger.debug("**** Section: %s ****", i)
             logger.debug(config.items(i))
+
             if config[i]["source_type"] == "crwd-fdr":
                 thread1 = FDR2Humio(
                     config[i]["access_key"],
@@ -543,6 +657,7 @@ if __name__ == "__main__":
                 thread1.daemon = True
                 thread1.start()
                 threads.append([thread1, "crwd-fdr"])
+
             if config[i]["source_type"] == "aws-cloudtrail":
                 thread1 = CloudTrail(
                     config[i]["access_key"],
@@ -556,6 +671,21 @@ if __name__ == "__main__":
                 thread1.daemon = True
                 thread1.start()
                 threads.append([thread1, "aws-cloudtrail"])
+
+            if config[i]["source_type"] == "aws-guardduty":
+                thread1 = AWSGuardDuty(
+                    config[i]["access_key"],
+                    config[i]["secret_key"],
+                    config[i]["sqs_queue_url"],
+                    config[i]["region"],
+                    config[i]["dest_url"],
+                    config[i]["dest_token"],
+                    name=i,
+                )
+                thread1.daemon = True
+                thread1.start()
+                threads.append([thread1, i])
+
             if config[i]["source_type"] == "crwd-siem-connector":
                 thread2 = SIEMConnector(
                     config[i]["source_location"],
@@ -566,6 +696,7 @@ if __name__ == "__main__":
                 thread2.daemon = True
                 thread2.start()
                 threads.append([thread2, "crwd-siem-connector"])
+
             if config[i]["source_type"] == "syslog":
                 thread3 = Syslog(
                     config[i]["source_location"],
@@ -578,6 +709,7 @@ if __name__ == "__main__":
                 thread3.daemon = True
                 thread3.start()
                 threads.append([thread3, "syslog"])
+
             if config[i]["source_type"] == "gcp-audit-log":
                 thread4 = GCPAuditLog(
                     config[i]["project_id"],
