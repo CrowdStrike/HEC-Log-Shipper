@@ -323,7 +323,7 @@ class AWSGuardDuty(threading.Thread):
     def get_content(self):
         """Read message from SQS queue"""
         try:
-            response = response = self.sqs_client.receive_message(
+            response = self.sqs_client.receive_message(
                 QueueUrl=self.sqs_q,
                 MessageAttributeNames=["ALL"],
                 WaitTimeSeconds=20,
