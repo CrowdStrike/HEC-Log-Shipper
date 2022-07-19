@@ -34,10 +34,10 @@ from google.cloud import pubsub_v1
 
 # Configure logging.
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s — %(name)s — %(levelname)s — %(message)s")
-log_handle = RotatingFileHandler('logshipper.log', maxBytes=2048000, backupCount=5)
-log_handle.setLevel(logging.DEBUG)
+log_handle = RotatingFileHandler("logshipper.log", maxBytes=2048000, backupCount=5)
+log_handle.setLevel(logging.INFO)
 log_handle.setFormatter(formatter)
 logger.addHandler(log_handle)
 hostname = socket.getfqdn()
@@ -48,15 +48,16 @@ hostname = socket.getfqdn()
 class FDR2Humio(threading.Thread):  # pylint: disable=R0902
     """FDR2Humio class."""
 
-    def __init__(self,  # pylint: disable=R0913
-                 a_key,
-                 s_key,
-                 sqs_q,
-                 rgn,
-                 dest_url,
-                 dest_token,
-                 name="crwd-fdr",
-                 ):
+    def __init__(
+        self,  # pylint: disable=R0913
+        a_key,
+        s_key,
+        sqs_q,
+        rgn,
+        dest_url,
+        dest_token,
+        name="crwd-fdr",
+    ):
         """Initialize the object."""
         threading.Thread.__init__(self)
         self.name = name
@@ -66,38 +67,42 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
         self.rgn = rgn
         self.dest_url = dest_url
         self.dest_token = dest_token
-        self.sqs_client = boto3.client('sqs',
-                                       region_name=self.rgn,
-                                       aws_access_key_id=self.a_key,
-                                       aws_secret_access_key=self.s_key
-                                       )
-        self.s3_client = boto3.client("s3",
-                                      region_name=self.rgn,
-                                      aws_access_key_id=self.a_key,
-                                      aws_secret_access_key=self.s_key
-                                      )
+        self.sqs_client = boto3.client(
+            "sqs",
+            region_name=self.rgn,
+            aws_access_key_id=self.a_key,
+            aws_secret_access_key=self.s_key,
+        )
+        self.s3_client = boto3.client(
+            "s3",
+            region_name=self.rgn,
+            aws_access_key_id=self.a_key,
+            aws_secret_access_key=self.s_key,
+        )
         self.http = urllib3.PoolManager()
         self.killed = False
 
     def run(self):
         """Start the thread."""
-        logger.debug('Starting %s', self.name)
+        logger.info("Starting %s", self.name)
         while not self.killed:
             sub_threads = []
             for _ in range(20):  # Might want to make thread count an adjustable variable
                 try:
                     bucket1, key1, handle1 = self.get_location()
                     if bucket1 and key1:
-                        subthread = threading.Thread(target=self.read_events, args=[bucket1, key1, handle1])
+                        subthread = threading.Thread(
+                            target=self.read_events, args=[bucket1, key1, handle1]
+                        )
                         sub_threads.append(subthread)
                         subthread.start()
                 except Exception as erred:
-                    logger.debug(erred)
+                    logger.error(erred)
                     break
             time.sleep(5)
             for sub_thread in sub_threads:
                 sub_thread.join()
-        logger.debug("Stopping %s", self.name)
+        logger.info("Stopping %s", self.name)
 
     def read_events(self, bucket2, key2, handle2):
         """Event reader sub-processing thread handler."""
@@ -107,17 +112,18 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
 
     def get_location(self):
         """Retrieve the S3 location from the SQS message."""
-        response = self.sqs_client.receive_message(QueueUrl=self.sqs_q, WaitTimeSeconds=10,
-                                                   VisibilityTimeout=300, MaxNumberOfMessages=1)
-        message = response['Messages'][0]
-        mbody = json.loads(message['Body'])
-        return mbody['bucket'], mbody['files'][0]['path'], message['ReceiptHandle']
+        response = self.sqs_client.receive_message(
+            QueueUrl=self.sqs_q, WaitTimeSeconds=10, VisibilityTimeout=300, MaxNumberOfMessages=1
+        )
+        message = response["Messages"][0]
+        mbody = json.loads(message["Body"])
+        return mbody["bucket"], mbody["files"][0]["path"], message["ReceiptHandle"]
 
     def get_content(self, bucket1, key1):
         """Read in the gzip'd message."""
         response = self.s3_client.get_object(Bucket=bucket1, Key=key1)
         with gzip.GzipFile(fileobj=response["Body"]) as gzipfile:
-            json_file = json.dumps(gzipfile.read().decode('utf-8'))
+            json_file = json.dumps(gzipfile.read().decode("utf-8"))
         return json_file
 
     def delete_message(self, handle1):
@@ -126,11 +132,15 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
 
     def ingest_event(self, record1):
         """Ingest the parsed event."""
-        return self.http.request("POST",
-                                 self.dest_url,
-                                 body=record1.encode('utf-8'),
-                                 headers={"Content-Type": "application/json", "Authorization": "Bearer"
-                                          + self.dest_token})
+        return self.http.request(
+            "POST",
+            self.dest_url,
+            body=record1.encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "Bearer" + self.dest_token,
+            },
+        )
 
     def kill(self):
         """Set the kill flag."""
@@ -140,15 +150,16 @@ class FDR2Humio(threading.Thread):  # pylint: disable=R0902
 class CloudTrail(threading.Thread):
     """AWS CloudTrail class."""
 
-    def __init__(self,
-                 a_key,
-                 s_key,
-                 sqs_q,
-                 rgn,
-                 dest_url,
-                 dest_token,
-                 name="aws-cloudtrail",
-                 ):
+    def __init__(
+        self,
+        a_key,
+        s_key,
+        sqs_q,
+        rgn,
+        dest_url,
+        dest_token,
+        name="aws-cloudtrail",
+    ):
         """Initialize the CloudTrail object."""
         threading.Thread.__init__(self)
         self.name = name
@@ -158,37 +169,41 @@ class CloudTrail(threading.Thread):
         self.rgn = rgn
         self.dest_url = dest_url
         self.dest_token = dest_token
-        self.sqs_client = boto3.client('sqs',
-                                       region_name=self.rgn,
-                                       aws_access_key_id=self.a_key,
-                                       aws_secret_access_key=self.s_key
-                                       )
-        self.s3_client = boto3.client("s3",
-                                      region_name=self.rgn,
-                                      aws_access_key_id=self.a_key,
-                                      aws_secret_access_key=self.s_key
-                                      )
+        self.sqs_client = boto3.client(
+            "sqs",
+            region_name=self.rgn,
+            aws_access_key_id=self.a_key,
+            aws_secret_access_key=self.s_key,
+        )
+        self.s3_client = boto3.client(
+            "s3",
+            region_name=self.rgn,
+            aws_access_key_id=self.a_key,
+            aws_secret_access_key=self.s_key,
+        )
         self.http = urllib3.PoolManager()
         self.killed = False
 
     def run(self):
         """Start the thread."""
-        logger.debug('Starting %s', self.name)
+        logger.info("Starting %s", self.name)
         while not self.killed:
             sub_threads = []
             for _ in range(50):  # Might want to make thread count an adjustable variable
                 try:
                     bucket1, key1, handle1 = self.get_location()
-                    subthread = threading.Thread(target=self.read_events, args=[bucket1, key1, handle1])
+                    subthread = threading.Thread(
+                        target=self.read_events, args=[bucket1, key1, handle1]
+                    )
                     sub_threads.append(subthread)
                     subthread.start()
                 except Exception as erred:
-                    logger.debug(erred)
+                    logger.error(erred)
                     break
             time.sleep(5)
             for sub_thread in sub_threads:
                 sub_thread.join()
-        logger.debug("Stopping %s", self.name)
+        logger.info("Stopping %s", self.name)
 
     def read_events(self, bucket2, key2, handle2):
         """Event reader sub-processing thread handler."""
@@ -201,8 +216,13 @@ class CloudTrail(threading.Thread):
 
     def get_location(self):
         """Retrieve the S3 location from the SQS message."""
-        response = self.sqs_client.receive_message(QueueUrl=self.sqs_q, MessageAttributeNames=["All"],
-                                                   WaitTimeSeconds=10, VisibilityTimeout=300, MaxNumberOfMessages=1)
+        response = self.sqs_client.receive_message(
+            QueueUrl=self.sqs_q,
+            MessageAttributeNames=["All"],
+            WaitTimeSeconds=20,
+            VisibilityTimeout=300,
+            MaxNumberOfMessages=1,
+        )
         message = json.loads(response["Messages"][0]["Body"])
         name = message["Records"][0]["s3"]["bucket"]["name"]
         key = message["Records"][0]["s3"]["object"]["key"]
@@ -212,7 +232,7 @@ class CloudTrail(threading.Thread):
     def get_content(self, bucket1, key1):
         """Read in the gzip'd message."""
         response = self.s3_client.get_object(Bucket=bucket1, Key=key1)
-        json_file = json.load(gzip.GzipFile(None, 'rb', None, BytesIO(response['Body'].read())))
+        json_file = json.load(gzip.GzipFile(None, "rb", None, BytesIO(response["Body"].read())))
         return json_file["Records"]
 
     def delete_message(self, handle1):
@@ -221,11 +241,124 @@ class CloudTrail(threading.Thread):
 
     def ingest_event(self, record1):
         """Ingest the parsed event."""
-        return self.http.request("POST",
-                                 self.dest_url,
-                                 body=record1,
-                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.dest_token}"}
-                                 )
+        return self.http.request(
+            "POST",
+            self.dest_url,
+            body=record1,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.dest_token}",
+            },
+        )
+
+    def kill(self):
+        """Set the kill flag."""
+        self.killed = True
+
+
+class AWSGuardDuty(threading.Thread):
+    """AWS GuardDuty class."""
+
+    def __init__(
+        self,
+        a_key,
+        s_key,
+        sqs_q,
+        rgn,
+        dest_url,
+        dest_token,
+        name,
+    ):
+        """Initialize the GuardDuty object."""
+        threading.Thread.__init__(self)
+        self.name = name
+        self.a_key = a_key
+        self.s_key = s_key
+        self.sqs_q = sqs_q
+        self.rgn = rgn
+        self.dest_url = dest_url
+        self.dest_token = dest_token
+        self.sqs_client = boto3.client(
+            "sqs",
+            region_name=self.rgn,
+            aws_access_key_id=self.a_key,
+            aws_secret_access_key=self.s_key,
+        )
+        self.http = urllib3.PoolManager()
+        self.killed = False
+
+    def run(self):
+        """Start the thread."""
+        logger.info("Starting %s", self.name)
+        while not self.killed:
+            sub_threads = []
+            for _ in range(50):  # Might want to make thread count an adjustable variable
+                try:
+                    subthread = threading.Thread(target=self.process_event)
+                    sub_threads.append(subthread)
+                    subthread.start()
+                except Exception as erred:
+                    logger.error(erred)
+                    break
+            time.sleep(5)
+            for sub_thread in sub_threads:
+                sub_thread.join()
+        logger.info("Stopping %s", self.name)
+
+    def process_event(self):
+        """Event reader sub-processing thread handler."""
+
+        response = self.get_content()
+        if response:
+            event, receipt_handle = response
+            try:
+                self.ingest_event(json.dumps({"event": json.loads(event)}))
+            except Exception as e:
+                logger.error("Unknown error occurred when writing document to Humio: %s", e)
+            try:
+                self.delete_message(receipt_handle)
+            except Exception as e:
+                logger.error("Unknown error occurred when deleting message from SQS: %s", e)
+
+    def get_content(self):
+        """Read message from SQS queue"""
+        try:
+            response = self.sqs_client.receive_message(
+                QueueUrl=self.sqs_q,
+                MessageAttributeNames=["ALL"],
+                WaitTimeSeconds=20,
+                VisibilityTimeout=15,
+                MaxNumberOfMessages=1,
+            )
+            if "Messages" in response:
+                event = response["Messages"][0]["Body"]
+                receipt_handle = response["Messages"][0]["ReceiptHandle"]
+                return event, receipt_handle
+            logger.debug("Received empty message from SQS")
+            return None
+        except Exception as e:
+            logger.error("Unknown error occured when reading message from SQS: %s", e)
+            return None
+
+    def delete_message(self, receipt_handle):
+        """Delete the message from the SQS queue."""
+        return self.sqs_client.delete_message(QueueUrl=self.sqs_q, ReceiptHandle=receipt_handle)
+
+    def ingest_event(self, event):
+        """Ingest the parsed event."""
+        try:
+            return self.http.request(
+                "POST",
+                self.dest_url,
+                body=event,
+                headers={
+                    "Content-Type": "application/json",
+                    "Authorization": f"Bearer {self.dest_token}",
+                },
+            )
+        except Exception as e:
+            logger.error("Unknown error occurred when writing to Humio: %s", e)
+            return None
 
     def kill(self):
         """Set the kill flag."""
@@ -248,20 +381,20 @@ class SIEMConnector(threading.Thread):
     def run(self):
         """Run the connector."""
         count = 0
-        logger.debug('Starting %s', self.name)
+        logger.info("Starting %s", self.name)
         if Path(self.source_loc).is_file():
-            logger.debug('filename: %s', self.source_loc)
-            newevent = ''
+            logger.debug("filename: %s", self.source_loc)
+            newevent = ""
             with open(self.source_loc, encoding="utf-8") as source_file:
                 for line in self.read_streaming_file(source_file):
                     newevent = newevent + line.rstrip()
-                    if line.rstrip() == '}':
+                    if line.rstrip() == "}":
                         count = count + 1
                         read_event = json.loads(newevent)
-                        logger.debug('Count = %s', str(count))
-                        self.ingest_event(json.dumps(read_event)+'\n')
-                        newevent = ''
-        logger.debug('Stopping %s', self.name)
+                        logger.debug("Count = %s", str(count))
+                        self.ingest_event(json.dumps(read_event) + "\n")
+                        newevent = ""
+        logger.info("Stopping %s", self.name)
 
     def read_streaming_file(self, source_loc1):
         """Read in the contents of the streamed file."""
@@ -270,18 +403,22 @@ class SIEMConnector(threading.Thread):
             _ = source_loc1.tell()
             line = source_loc1.readline()
             if not line:
-                logger.debug('sleeping... %s', self.name)
+                logger.debug("sleeping... %s", self.name)
                 time.sleep(interval)
             else:
                 yield line
 
     def ingest_event(self, event1):
         """Ingest the parsed event."""
-        return self.http.request("POST",
-                                 self.dest_url,
-                                 body=event1,
-                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.dest_token}"}
-                                 )
+        return self.http.request(
+            "POST",
+            self.dest_url,
+            body=event1,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.dest_token}",
+            },
+        )
 
     def kill(self):
         """Set the kill flag."""
@@ -291,14 +428,7 @@ class SIEMConnector(threading.Thread):
 class Syslog(threading.Thread):
     """Class to represent a SysLog connection."""
 
-    def __init__(self,
-                 source_loc,
-                 source_cat,
-                 dest_type,
-                 dest_url,
-                 dest_token,
-                 name="syslog"
-                 ):
+    def __init__(self, source_loc, source_cat, dest_type, dest_url, dest_token, name="syslog"):
         """Initialize the Syslog object."""
         threading.Thread.__init__(self)
         self.name = name
@@ -312,17 +442,20 @@ class Syslog(threading.Thread):
 
     def run(self):
         """Start the connector."""
-        logger.debug('Starting %s', self.name)
-        if (Path(self.source_loc).is_file() and self.source_cat == 'folder') \
-                or Path(self.source_loc).is_dir() and self.source_cat == 'file':
-            logger.debug(self.source_loc+' is not '+self.source_cat)
+        logger.info("Starting %s", self.name)
+        if (
+            (Path(self.source_loc).is_file() and self.source_cat == "folder")
+            or Path(self.source_loc).is_dir()
+            and self.source_cat == "file"
+        ):
+            logger.info(self.source_loc + " is not " + self.source_cat)
         else:
             pos = {}
             if Path(self.name).exists():
                 try:
-                    with open(self.name, 'r') as pfr:
+                    with open(self.name, "r") as pfr:
                         pos = json.load(pfr)
-                        logger.debug('history loaded..')
+                        logger.debug("history loaded..")
                 except Exception as erred:
                     logger.debug(erred)
                     pos = {}
@@ -341,13 +474,17 @@ class Syslog(threading.Thread):
             for file in self.get_files(source_loc1):
                 try:
                     # pylint: disable=R1732
-                    if (file in pos1 and pos1[file] == 'error') or ("\0" in open(file).read(512)):
+                    if (file in pos1 and pos1[file] == "error") or ("\0" in open(file).read(512)):
                         continue
                     with open(file) as content_file:
                         # MD5 is used here to determine position only.
-                        header = hashlib.md5(content_file.read(512).encode('utf-8')).hexdigest()  # nosec
+                        header = hashlib.md5(  # nosec
+                            content_file.read(512).encode("utf-8")
+                        ).hexdigest()
                     with open(file) as file_handle:
-                        mapped = mmap.mmap(file_handle.fileno(), 0, prot=mmap.PROT_READ)  # pylint: disable=I1101
+                        mapped = mmap.mmap(
+                            file_handle.fileno(), 0, prot=mmap.PROT_READ
+                        )  # pylint: disable=I1101
                         if header not in pos1:
                             pos1[header] = mapped.tell()
                         else:
@@ -358,13 +495,13 @@ class Syslog(threading.Thread):
                                 break
                             pos1[header] = mapped.tell()
                             new_content = True
-                            self.ingest_event(line.decode('utf-8'), file)
+                            self.ingest_event(line.decode("utf-8"), file)
                 except Exception as erred:
-                    pos1[file] = 'error'
+                    pos1[file] = "error"
                     logger.debug("%s : %s", str(file), str(erred))
                     continue
             if new_content:
-                logger.debug('updating data...')
+                logger.debug("updating data...")
                 self.write_inv(pos1)
             time.sleep(0.1)
 
@@ -374,25 +511,26 @@ class Syslog(threading.Thread):
 
         Validate and expand by wildcard and OS type.
         """
-        files = glob.glob(source_loc2+'/**', recursive=True)
+        files = glob.glob(source_loc2 + "/**", recursive=True)
         return [f for f in files if os.path.isfile(f)]
 
     def ingest_event(self, event1, file1):
         """Ingest the parsed event."""
         event2 = {"@rawstring": event1, "#source": file1, "#host": hostname}
-        return self.http.request("POST",
-                                 self.dest_url,
-                                 body=json.dumps(event2),
-                                 headers={
-                                     "Content-Type": "text/plain",
-                                     "charset": "utf-8",
-                                     "Authorization": f"Bearer {self.dest_token}"
-                                     }
-                                 )
+        return self.http.request(
+            "POST",
+            self.dest_url,
+            body=json.dumps(event2),
+            headers={
+                "Content-Type": "text/plain",
+                "charset": "utf-8",
+                "Authorization": f"Bearer {self.dest_token}",
+            },
+        )
 
     def write_inv(self, pos2):
         """Store our position in the file."""
-        with open(self.name, 'w') as pfw:
+        with open(self.name, "w") as pfw:
             json.dump(pos2, pfw)
 
     def kill(self):
@@ -403,14 +541,7 @@ class Syslog(threading.Thread):
 class GCPAuditLog(threading.Thread):
     """Class to represent a GCP audit log connection."""
 
-    def __init__(self,
-                 proj_id,
-                 sub_id,
-                 cred_path,
-                 dest_url,
-                 dest_token,
-                 name="gcp-audit-log"
-                 ):
+    def __init__(self, proj_id, sub_id, cred_path, dest_url, dest_token, name="gcp-audit-log"):
         """Initialize the GCP Audit object."""
         threading.Thread.__init__(self)
         self.name = name
@@ -419,7 +550,7 @@ class GCPAuditLog(threading.Thread):
         self.cred_path = cred_path
         self.dest_url = dest_url
         self.dest_token = dest_token
-        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = self.cred_path
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = self.cred_path
         self.subscriber = pubsub_v1.SubscriberClient()
         self.sub_path = self.subscriber.subscription_path(self.proj_id, self.sub_id)
         self.http = urllib3.PoolManager()
@@ -435,9 +566,9 @@ class GCPAuditLog(threading.Thread):
         """Run the connector and set the trace."""
         sys.settrace(self.globaltrace)
         # timeout = 5.0
-        logger.debug("Starting %s", self.name)
+        logger.info("Starting %s", self.name)
         streaming_pull_future = self.subscriber.subscribe(self.sub_path, callback=self.callback)
-        logger.debug("Listening for messages on %s", self.sub_path)
+        logger.info("Listening for messages on %s", self.sub_path)
         with self.subscriber:
             time.sleep(5)
             try:
@@ -455,7 +586,7 @@ class GCPAuditLog(threading.Thread):
     def globaltrace(self, frame, event, arg):  # pylint: disable=W0613
         """Return the local trace for `call` events."""
         returned = None
-        if event == 'call':
+        if event == "call":
             returned = self.localtrace
 
         return returned
@@ -463,18 +594,22 @@ class GCPAuditLog(threading.Thread):
     def localtrace(self, frame, event, arg):  # pylint: disable=W0613
         """Raise SystemExit on the next line called."""
         if self.killed:
-            if event == 'line':
+            if event == "line":
                 raise SystemExit("Thread quitting")
         return self.localtrace
 
     def ingest_event(self, event1):
         """Ingest the parsed event."""
         # auth_token = ' Bearer '+self.dest_token
-        return self.http.request("POST",
-                                 self.dest_url,
-                                 body=event1,
-                                 headers={"Content-Type": "application/json", "Authorization": f"Bearer {self.dest_token}"}
-                                 )
+        return self.http.request(
+            "POST",
+            self.dest_url,
+            body=event1,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.dest_token}",
+            },
+        )
 
     def kill(self):
         """Set the kill flag."""
@@ -504,32 +639,82 @@ if __name__ == "__main__":
         for i in config.sections():
             logger.debug("**** Section: %s ****", i)
             logger.debug(config.items(i))
+
             if config[i]["source_type"] == "crwd-fdr":
-                thread1 = FDR2Humio(config[i]["access_key"], config[i]["secret_key"], config[i]["sqs_queue_url"],
-                                    config[i]["region"], config[i]["dest_url"], config[i]["dest_token"], name=i)
+                thread1 = FDR2Humio(
+                    config[i]["access_key"],
+                    config[i]["secret_key"],
+                    config[i]["sqs_queue_url"],
+                    config[i]["region"],
+                    config[i]["dest_url"],
+                    config[i]["dest_token"],
+                    name=i,
+                )
                 thread1.daemon = True
                 thread1.start()
                 threads.append([thread1, "crwd-fdr"])
+
             if config[i]["source_type"] == "aws-cloudtrail":
-                thread1 = CloudTrail(config[i]["access_key"], config[i]["secret_key"], config[i]["sqs_queue_url"],
-                                     config[i]["region"], config[i]["dest_url"], config[i]["dest_token"], name=i)
+                thread1 = CloudTrail(
+                    config[i]["access_key"],
+                    config[i]["secret_key"],
+                    config[i]["sqs_queue_url"],
+                    config[i]["region"],
+                    config[i]["dest_url"],
+                    config[i]["dest_token"],
+                    name=i,
+                )
                 thread1.daemon = True
                 thread1.start()
                 threads.append([thread1, "aws-cloudtrail"])
+
+            if config[i]["source_type"] == "aws-guardduty":
+                thread1 = AWSGuardDuty(
+                    config[i]["access_key"],
+                    config[i]["secret_key"],
+                    config[i]["sqs_queue_url"],
+                    config[i]["region"],
+                    config[i]["dest_url"],
+                    config[i]["dest_token"],
+                    name=i,
+                )
+                thread1.daemon = True
+                thread1.start()
+                threads.append([thread1, i])
+
             if config[i]["source_type"] == "crwd-siem-connector":
-                thread2 = SIEMConnector(config[i]["source_location"], config[i]["dest_url"], config[i]["dest_token"], name=i)
+                thread2 = SIEMConnector(
+                    config[i]["source_location"],
+                    config[i]["dest_url"],
+                    config[i]["dest_token"],
+                    name=i,
+                )
                 thread2.daemon = True
                 thread2.start()
                 threads.append([thread2, "crwd-siem-connector"])
+
             if config[i]["source_type"] == "syslog":
-                thread3 = Syslog(config[i]["source_location"], config[i]["source_category"], config[i]
-                                 ["dest_type"], config[i]["dest_url"], config[i]["dest_token"], name=i)
+                thread3 = Syslog(
+                    config[i]["source_location"],
+                    config[i]["source_category"],
+                    config[i]["dest_type"],
+                    config[i]["dest_url"],
+                    config[i]["dest_token"],
+                    name=i,
+                )
                 thread3.daemon = True
                 thread3.start()
                 threads.append([thread3, "syslog"])
+
             if config[i]["source_type"] == "gcp-audit-log":
-                thread4 = GCPAuditLog(config[i]["project_id"], config[i]["subscription_id"], config[i]
-                                      ["credential_path"], config[i]["dest_url"], config[i]["dest_token"], name=i)
+                thread4 = GCPAuditLog(
+                    config[i]["project_id"],
+                    config[i]["subscription_id"],
+                    config[i]["credential_path"],
+                    config[i]["dest_url"],
+                    config[i]["dest_token"],
+                    name=i,
+                )
                 thread4.daemon = True
                 thread4.start()
                 threads.append([thread4, "gcp-audit-log"])
