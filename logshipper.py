@@ -478,9 +478,9 @@ class Syslog(threading.Thread):
                         continue
                     with open(file) as content_file:
                         # MD5 is used here to determine position only.
-                        header = hashlib.md5(
+                        header = hashlib.md5(  # nosec
                             content_file.read(512).encode("utf-8")
-                        ).hexdigest()  # nosec
+                        ).hexdigest()
                     with open(file) as file_handle:
                         mapped = mmap.mmap(
                             file_handle.fileno(), 0, prot=mmap.PROT_READ
