@@ -328,7 +328,7 @@ class AWSGuardDuty(threading.Thread):
             response = response = self.sqs_client.receive_message(
                 QueueUrl=self.sqs_q,
                 MessageAttributeNames=["ALL"],
-                WaitTimeSeconds=10,
+                WaitTimeSeconds=20,
                 VisibilityTimeout=15,
                 MaxNumberOfMessages=1,
             )
